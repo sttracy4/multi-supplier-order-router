@@ -71,7 +71,7 @@ app.UseExceptionHandler(exceptionHandlerApp =>
             await context.Response.WriteAsJsonAsync(new
             {
                 feasible = false,
-                infeasibility_reason = "An internal error occurred while processing the order.",
+                errors = new[] { "An internal error occurred while processing the order." },
                 routing = Array.Empty<object>(),
             });
         }

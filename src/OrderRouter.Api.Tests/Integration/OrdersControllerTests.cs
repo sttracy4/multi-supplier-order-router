@@ -193,7 +193,7 @@ public class OrdersControllerTests : IClassFixture<OrdersControllerTests.TestWeb
 
         var result = await response.Content.ReadFromJsonAsync<OrderResponse>(JsonOptions());
         Assert.False(result!.Feasible);
-        Assert.Contains("UNKNOWN-999", result.InfeasibilityReason);
+        Assert.Contains(result.Errors!, e => e.Contains("UNKNOWN-999"));
     }
 
     [Fact]
@@ -205,7 +205,7 @@ public class OrdersControllerTests : IClassFixture<OrdersControllerTests.TestWeb
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<OrderResponse>(JsonOptions());
         Assert.False(result!.Feasible);
-        Assert.NotNull(result.InfeasibilityReason);
+        Assert.NotEmpty(result.Errors!);
     }
 
     [Fact]
@@ -223,7 +223,7 @@ public class OrdersControllerTests : IClassFixture<OrdersControllerTests.TestWeb
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<OrderResponse>(JsonOptions());
         Assert.False(result!.Feasible);
-        Assert.NotNull(result.InfeasibilityReason);
+        Assert.NotEmpty(result.Errors!);
     }
 
     [Fact]
@@ -231,6 +231,84 @@ public class OrdersControllerTests : IClassFixture<OrdersControllerTests.TestWeb
     {
         var response = await _client.GetAsync("/api/health");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    // Validation: quantity = 0 → infeasible
+    [Fact]
+    public async Task Route_QuantityZero_Returns200WithInfeasible()
+    {
+        var json = """{"order_id":"ORD-QTY","customer_zip":"10015","items":[{"product_code":"WC-STD-001","quantity":0}]}""";
+        var response = await _client.PostAsync("/api/route", new StringContent(json, Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<OrderResponse>(JsonOptions());
+        Assert.False(result!.Feasible);
+        Assert.Contains(result.Errors!, e => e.Contains("least 1"));
+    }
+
+    // Validation: empty items array → infeasible
+    [Fact]
+    public async Task Route_EmptyItemsArray_Returns200WithInfeasible()
+    {
+        var json = """{"order_id":"ORD-EMPTY","customer_zip":"10015","items":[]}""";
+        var response = await _client.PostAsync("/api/route", new StringContent(json, Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<OrderResponse>(JsonOptions());
+        Assert.False(result!.Feasible);
+        Assert.NotEmpty(result.Errors!);
+    }
+
+    // Validation: missing items field entirely → infeasible
+    [Fact]
+    public async Task Route_MissingItemsField_Returns200WithInfeasible()
+    {
+        var json = """{"order_id":"ORD-NOITEMS","customer_zip":"10015"}""";
+        var response = await _client.PostAsync("/api/route", new StringContent(json, Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<OrderResponse>(JsonOptions());
+        Assert.False(result!.Feasible);
+        Assert.NotEmpty(result.Errors!);
+    }
+
+    // Validation: whitespace-only order_id → infeasible
+    [Fact]
+    public async Task Route_WhitespaceOnlyOrderId_Returns200WithInfeasible()
+    {
+        var json = """{"order_id":"   ","customer_zip":"10015","items":[{"product_code":"WC-STD-001","quantity":1}]}""";
+        var response = await _client.PostAsync("/api/route", new StringContent(json, Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<OrderResponse>(JsonOptions());
+        Assert.False(result!.Feasible);
+        Assert.NotEmpty(result.Errors!);
+    }
+
+    // Product code case sensitivity: wrong case → infeasible
+    [Fact]
+    public async Task Route_ProductCodeWrongCase_Returns200WithInfeasible()
+    {
+        var request = new OrderRequest
+        {
+            OrderId = "ORD-CASE",
+            CustomerZip = "10015",
+            MailOrder = false,
+            Items = new List<OrderItem> { new() { ProductCode = "wc-std-001", Quantity = 1 } } // lowercase
+        };
+
+        var response = await PostOrderAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<OrderResponse>(JsonOptions());
+        Assert.False(result!.Feasible);
+        Assert.Contains(result.Errors!, e => e.Contains("wc-std-001"));
+    }
+
+    // Product code with trailing whitespace → trimmed and routed successfully
+    [Fact]
+    public async Task Route_ProductCodeWithWhitespace_TrimsAndSucceeds()
+    {
+        var json = """{"order_id":"ORD-TRIM","customer_zip":"10015","items":[{"product_code":"WC-STD-001 ","quantity":1}]}""";
+        var response = await _client.PostAsync("/api/route", new StringContent(json, Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<OrderResponse>(JsonOptions());
+        Assert.True(result!.Feasible); // trim should resolve to known product
     }
 
     private static System.Text.Json.JsonSerializerOptions JsonOptions() =>

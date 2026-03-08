@@ -25,12 +25,13 @@ public class OrderRoutingService : IOrderRoutingService
         var itemCategories = new List<ItemWithCategory>();
         foreach (var item in request.Items)
         {
+            var trimmedCode = item.ProductCode.Trim();
             var product = await _db.Products
                 .AsNoTracking()
-                .FirstOrDefaultAsync(p => p.ProductCode == item.ProductCode);
+                .FirstOrDefaultAsync(p => p.ProductCode == trimmedCode);
 
             if (product == null)
-                return Infeasible($"Unknown product code: {item.ProductCode}");
+                return Infeasible($"Unknown product code: {trimmedCode}");
 
             itemCategories.Add(new ItemWithCategory(item, product.Category));
         }
@@ -115,6 +116,6 @@ public class OrderRoutingService : IOrderRoutingService
         return new OrderResponse { Feasible = true, Routing = routing };
     }
 
-    private static OrderResponse Infeasible(string reason) =>
-        new() { Feasible = false, InfeasibilityReason = reason };
+    private static OrderResponse Infeasible(string error) =>
+        new() { Feasible = false, Errors = new List<string> { error } };
 }

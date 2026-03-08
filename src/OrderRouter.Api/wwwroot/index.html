@@ -433,12 +433,18 @@
     }
 
     if (!data.feasible) {
+      const errors = Array.isArray(data.errors) && data.errors.length
+        ? data.errors
+        : ['No eligible suppliers found.'];
+      const errorHtml = errors.length === 1
+        ? `<div style="font-size:0.8rem;color:#fca5a5">${esc(errors[0])}</div>`
+        : `<ul style="font-size:0.8rem;color:#fca5a5;margin:0;padding-left:18px">${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>`;
       area.innerHTML = `
         <div style="display:flex;align-items:flex-start;gap:12px;padding:14px;background:#1a0a0a;border:1px solid #450a0a;border-radius:8px">
           <span style="font-size:1.4rem">⚠</span>
-          <div>
-            <div style="font-weight:600;color:#f87171;margin-bottom:4px">Order cannot be fulfilled</div>
-            <div style="font-size:0.8rem;color:#fca5a5">${esc(data.infeasibility_reason || 'No eligible suppliers found.')}</div>
+          <div style="flex:1">
+            <div style="font-weight:600;color:#f87171;margin-bottom:6px">Order cannot be fulfilled</div>
+            ${errorHtml}
           </div>
         </div>
         <details style="margin-top:14px">

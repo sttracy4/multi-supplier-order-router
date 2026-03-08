@@ -133,7 +133,7 @@ public class OrderRoutingServiceTests
         var result = await service.RouteAsync(SimpleRequest("10001", false, "X001"));
 
         Assert.False(result.Feasible);
-        Assert.Contains("rarecat", result.InfeasibilityReason);
+        Assert.Contains(result.Errors!, e => e.Contains("rarecat"));
     }
 
     // Scenario 4: mail_order=false excludes mail-order-only supplier
@@ -227,6 +227,136 @@ public class OrderRoutingServiceTests
         var result = await service.RouteAsync(SimpleRequest("10001", false, "DOES-NOT-EXIST"));
 
         Assert.False(result.Feasible);
-        Assert.Contains("DOES-NOT-EXIST", result.InfeasibilityReason);
+        Assert.Contains(result.Errors!, e => e.Contains("DOES-NOT-EXIST"));
+    }
+
+    // Scenario 9: Duplicate product codes in same order → both line items preserved
+    [Fact]
+    public async Task Route_DuplicateProductCodesInItems_ReturnsBothLineItems()
+    {
+        var db = BuildDb(new Product { Id = 1, ProductCode = "A001", ProductName = "Widget A", Category = "widgets" });
+
+        var supplier = new Supplier
+        {
+            Id = 1, SupplierId = "SUP-001", SupplierName = "Acme", SatisfactionScore = 9,
+            CanMailOrder = false, ServesNationwide = false,
+            ServiceZips = new List<SupplierServiceZip> { new() { Zip = "10001" } },
+            ProductCategories = new List<SupplierProductCategory> { new() { Category = "widgets" } },
+        };
+
+        var repo = new Mock<ISupplierRepository>();
+        repo.Setup(r => r.GetEligibleSuppliersForAllCategoriesAsync("10001", false, It.IsAny<IEnumerable<string>>()))
+            .ReturnsAsync(new List<Supplier> { supplier });
+
+        var service = new OrderRoutingService(db, repo.Object);
+        var request = new OrderRequest
+        {
+            OrderId = "ORD-DUP",
+            CustomerZip = "10001",
+            MailOrder = false,
+            Items = new List<OrderItem>
+            {
+                new() { ProductCode = "A001", Quantity = 2 },
+                new() { ProductCode = "A001", Quantity = 1 },
+            }
+        };
+
+        var result = await service.RouteAsync(request);
+
+        Assert.True(result.Feasible);
+        Assert.Single(result.Routing);
+        Assert.Equal(2, result.Routing[0].Items.Count); // both line items preserved under one supplier
+    }
+
+    // Scenario 10: Two unknown product codes → only first is reported
+    [Fact]
+    public async Task Route_MultipleUnknownProductCodes_ReportsFirstUnknownOnly()
+    {
+        var db = BuildDb(); // no products seeded
+
+        var repo = new Mock<ISupplierRepository>();
+        var service = new OrderRoutingService(db, repo.Object);
+        var request = new OrderRequest
+        {
+            OrderId = "ORD-MULTI-UNK",
+            CustomerZip = "10001",
+            MailOrder = false,
+            Items = new List<OrderItem>
+            {
+                new() { ProductCode = "UNKNOWN-1", Quantity = 1 },
+                new() { ProductCode = "UNKNOWN-2", Quantity = 1 },
+            }
+        };
+
+        var result = await service.RouteAsync(request);
+
+        Assert.False(result.Feasible);
+        Assert.Contains(result.Errors!, e => e.Contains("UNKNOWN-1"));
+        Assert.DoesNotContain(result.Errors!, e => e.Contains("UNKNOWN-2"));
+    }
+
+    // Scenario 11: Nationwide supplier always returns fulfillment_mode "local"
+    [Fact]
+    public async Task Route_NationwideSupplier_FulfillmentModeIsLocal()
+    {
+        var db = BuildDb(new Product { Id = 1, ProductCode = "A001", ProductName = "Widget A", Category = "widgets" });
+
+        var nationwide = new Supplier
+        {
+            Id = 1, SupplierId = "SUP-NAT", SupplierName = "Nationwide Co", SatisfactionScore = 8,
+            CanMailOrder = false, ServesNationwide = true,
+            ServiceZips = new List<SupplierServiceZip>(), // no explicit ZIPs — relies on ServesNationwide
+            ProductCategories = new List<SupplierProductCategory> { new() { Category = "widgets" } },
+        };
+
+        var repo = new Mock<ISupplierRepository>();
+        repo.Setup(r => r.GetEligibleSuppliersForAllCategoriesAsync("99999", false, It.IsAny<IEnumerable<string>>()))
+            .ReturnsAsync(new List<Supplier> { nationwide });
+
+        var service = new OrderRoutingService(db, repo.Object);
+        var result = await service.RouteAsync(SimpleRequest("99999", false, "A001"));
+
+        Assert.True(result.Feasible);
+        Assert.Equal("local", result.Routing[0].Items[0].FulfillmentMode);
+    }
+
+    // Scenario 12: Two items in same category fall back to one supplier in multi-supplier mode
+    [Fact]
+    public async Task Route_TwoItemsSameCategory_MultiSupplierFallback_SingleRoutingEntry()
+    {
+        var db = BuildDb(
+            new Product { Id = 1, ProductCode = "WC-001", ProductName = "Wheelchair A", Category = "wheelchair" },
+            new Product { Id = 2, ProductCode = "WC-002", ProductName = "Wheelchair B", Category = "wheelchair" });
+
+        var wheelchairSupplier = LocalSupplier("SUP-001", "Wheelchair Co", "10001", "wheelchair", 8m);
+
+        var repo = new Mock<ISupplierRepository>();
+        repo.Setup(r => r.GetEligibleSuppliersForAllCategoriesAsync(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>>()))
+            .ReturnsAsync(new List<Supplier>()); // no single supplier consolidation
+        repo.Setup(r => r.GetEligibleSuppliersByCategoryAsync("10001", false, It.IsAny<IEnumerable<string>>()))
+            .ReturnsAsync(new Dictionary<string, List<Supplier>>
+            {
+                ["wheelchair"] = new List<Supplier> { wheelchairSupplier }
+            });
+
+        var service = new OrderRoutingService(db, repo.Object);
+        var request = new OrderRequest
+        {
+            OrderId = "ORD-SAME-CAT",
+            CustomerZip = "10001",
+            MailOrder = false,
+            Items = new List<OrderItem>
+            {
+                new() { ProductCode = "WC-001", Quantity = 1 },
+                new() { ProductCode = "WC-002", Quantity = 1 },
+            }
+        };
+
+        var result = await service.RouteAsync(request);
+
+        Assert.True(result.Feasible);
+        Assert.Single(result.Routing); // both items grouped under the single wheelchair supplier
+        Assert.Equal(2, result.Routing[0].Items.Count);
+        Assert.Equal("SUP-001", result.Routing[0].SupplierId);
     }
 }

@@ -3,7 +3,7 @@ namespace OrderRouter.Api.DTOs;
 public class OrderResponse
 {
     public bool Feasible { get; set; }
-    public string? InfeasibilityReason { get; set; }
+    public List<string>? Errors { get; set; }
     public List<RoutedSupplier> Routing { get; set; } = new();
 }
 

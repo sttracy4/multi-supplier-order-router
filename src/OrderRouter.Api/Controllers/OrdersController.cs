@@ -22,7 +22,7 @@ public class OrdersController : ControllerBase
     [ProducesResponseType(typeof(OrderResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> Route([FromBody] OrderRequest? request)
     {
-        // Validation errors → feasible: false with a descriptive reason
+        // Validation errors → feasible: false with all error messages
         if (request is null)
             return Ok(Infeasible("Request body is required."));
 
@@ -31,8 +31,9 @@ public class OrdersController : ControllerBase
             var errors = ModelState.Values
                 .SelectMany(v => v.Errors)
                 .Select(e => e.ErrorMessage)
-                .Where(m => !string.IsNullOrWhiteSpace(m));
-            return Ok(Infeasible(string.Join(" ", errors)));
+                .Where(m => !string.IsNullOrWhiteSpace(m))
+                .ToList();
+            return Ok(new OrderResponse { Feasible = false, Errors = errors });
         }
 
         try
@@ -50,6 +51,6 @@ public class OrdersController : ControllerBase
     [HttpGet("health")]
     public IActionResult Health() => Ok(new { status = "healthy" });
 
-    private static OrderResponse Infeasible(string reason) =>
-        new() { Feasible = false, InfeasibilityReason = reason };
+    private static OrderResponse Infeasible(string error) =>
+        new() { Feasible = false, Errors = new List<string> { error } };
 }

@@ -99,4 +99,15 @@ analyze supplers.csv and products.csv and find a scenario where multiple supplie
 Refactor the api/route endpoint to always return 200, if there is a validation error or exception simply return as feasible set to false. Also add a README file detailing how to start the app with docker and use the front end.
 
 ## Prompt 7
-Ensure proper guards are set up for bad data and normalize data when reading from products.csv and suppliers.csv, do not fail on bad data simply skip record and move on 
+Ensure proper guards are set up for bad data and normalize data when reading from products.csv and suppliers.csv, do not fail on bad data simply skip record and move on
+
+## Prompt 8
+Let's refactor the unsuccessful routeing response to look more like this
+{
+   "feasible": false,
+   "errors":
+   [
+   "Order must include at least one line item",
+   "Order must include a valid customer_zip"
+   ]
+}
