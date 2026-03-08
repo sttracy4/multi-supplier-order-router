@@ -19,7 +19,17 @@ A containerized REST API that receives multi-item DME (Durable Medical Equipment
 cd multi-supplier-order-router
 ```
 
-### 2. Start the stack
+### 2. Create the `.env` file
+
+The repo does not commit credentials. Create a `.env` file in the project root with the following contents — the values can be anything, they just need to be consistent:
+
+```bash
+POSTGRES_USER=orderrouter
+POSTGRES_PASSWORD=orderrouter_dev_pw
+POSTGRES_DB=orderrouter
+```
+
+### 3. Start the stack
 
 ```bash
 docker compose up --build
@@ -34,7 +44,7 @@ This will:
 
 First build takes ~60–90 seconds. Subsequent starts are fast (data is already seeded).
 
-### 3. Verify it's running
+### 4. Verify it's running
 
 ```bash
 curl http://localhost:8080/api/health
@@ -152,12 +162,15 @@ Always returns **HTTP 200**. Check `feasible` in the response body to determine 
 }
 ```
 
-**Infeasible response** (no eligible supplier found, validation error, or internal error)
+**Infeasible response** (validation error, no eligible supplier, or internal error)
 
 ```json
 {
   "feasible": false,
-  "infeasibility_reason": "No eligible supplier found for category: wheelchair",
+  "errors": [
+    "Order must include at least one line item.",
+    "Order must include a valid customer_zip."
+  ],
   "routing": []
 }
 ```
@@ -187,7 +200,7 @@ Full interactive API docs: **http://localhost:8080/swagger**
 ```
 multi-supplier-order-router/
 ├── docker-compose.yml          # API + PostgreSQL containers
-├── .env                        # DB credentials (not committed)
+├── .env                        # DB credentials (not committed — create manually)
 ├── resources/
 │   ├── suppliers.csv           # ~1,100 suppliers
 │   ├── products.csv            # ~1,195 products
@@ -207,9 +220,11 @@ multi-supplier-order-router/
 
 ## Running Tests
 
+Requires the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) installed on the host (not needed to run the app via Docker).
+
 ```bash
 cd src/OrderRouter.Api.Tests
 dotnet test
 ```
 
-30 tests covering ZIP range parsing, routing logic, CSV parsing, and full HTTP integration scenarios.
+54 tests covering ZIP range parsing, routing logic, CSV parsing, and full HTTP integration scenarios.
