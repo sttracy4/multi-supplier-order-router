@@ -1,0 +1,33 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.userprefs
+project.lock.json
+*.nupkg
+*.snupkg
+**/TestResults/
+**/BenchmarkDotNet.Artifacts/
+
+# Environment / secrets
+.env
+
+# Claude Code local settings
+.claude/
+
+# Rider / JetBrains
+.idea/
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Docker
+docker-compose.override.yml
+
+# EF Core migrations that are auto-generated (keep them in source control — do NOT ignore)
+# src/OrderRouter.Api/Data/Migrations/

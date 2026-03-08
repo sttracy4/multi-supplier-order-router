@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Order Router</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 18px 32px;
+      border-bottom: 1px solid #1e2535;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    header h1 { font-size: 1.1rem; font-weight: 600; color: #f1f5f9; }
+    header span { font-size: 0.75rem; background: #1e3a5f; color: #60a5fa; padding: 2px 8px; border-radius: 99px; }
+
+    .main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      height: calc(100vh - 57px);
+    }
+
+    .panel {
+      display: flex;
+      flex-direction: column;
+      padding: 24px;
+      border-right: 1px solid #1e2535;
+    }
+
+    .panel:last-child { border-right: none; }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .panel-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #64748b;
+    }
+
+    .sample-btns {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .sample-btn {
+      font-size: 0.7rem;
+      padding: 3px 8px;
+      background: #1e2535;
+      border: 1px solid #2d3748;
+      border-radius: 4px;
+      color: #94a3b8;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .sample-btn:hover { background: #263045; color: #e2e8f0; }
+
+    textarea {
+      flex: 1;
+      background: #0d1120;
+      border: 1px solid #1e2535;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", Menlo, monospace;
+      font-size: 0.8rem;
+      line-height: 1.6;
+      padding: 14px;
+      resize: none;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    textarea:focus { border-color: #3b82f6; }
+
+    textarea.error { border-color: #ef4444; }
+
+    .actions {
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .submit-btn {
+      padding: 8px 20px;
+      background: #2563eb;
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .submit-btn:hover:not(:disabled) { background: #1d4ed8; }
+    .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .clear-btn {
+      padding: 8px 14px;
+      background: transparent;
+      border: 1px solid #2d3748;
+      border-radius: 6px;
+      color: #64748b;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .clear-btn:hover { color: #e2e8f0; border-color: #64748b; }
+
+    .err-msg {
+      font-size: 0.75rem;
+      color: #f87171;
+      margin-left: auto;
+    }
+
+    /* Response panel */
+    .response-area {
+      flex: 1;
+      background: #0d1120;
+      border: 1px solid #1e2535;
+      border-radius: 8px;
+      overflow: auto;
+      padding: 14px;
+      font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", Menlo, monospace;
+      font-size: 0.8rem;
+      line-height: 1.6;
+    }
+
+    .status-bar {
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.75rem;
+      color: #64748b;
+      min-height: 28px;
+    }
+
+    .badge {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 0.7rem;
+    }
+
+    .badge-feasible   { background: #14532d; color: #4ade80; }
+    .badge-infeasible { background: #450a0a; color: #f87171; }
+    .badge-200 { background: #14532d; color: #4ade80; }
+    .badge-400, .badge-500 { background: #450a0a; color: #f87171; }
+
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid #2d3748;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* JSON syntax highlight */
+    .json-key    { color: #7dd3fc; }
+    .json-str    { color: #86efac; }
+    .json-num    { color: #fbbf24; }
+    .json-bool   { color: #c084fc; }
+    .json-null   { color: #94a3b8; }
+
+    .placeholder {
+      color: #374151;
+      font-style: italic;
+      user-select: none;
+    }
+
+    /* Routing cards */
+    .routing-cards { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+
+    .supplier-card {
+      background: #0f1117;
+      border: 1px solid #1e2535;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .supplier-card-header {
+      padding: 10px 14px;
+      background: #111827;
+      border-bottom: 1px solid #1e2535;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .supplier-id { font-size: 0.7rem; color: #64748b; }
+    .supplier-name { font-size: 0.85rem; font-weight: 600; color: #f1f5f9; }
+
+    .items-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    .items-table th {
+      text-align: left; padding: 6px 14px;
+      font-size: 0.65rem; font-weight: 600; letter-spacing: 0.06em;
+      text-transform: uppercase; color: #475569;
+      border-bottom: 1px solid #1e2535;
+    }
+    .items-table td { padding: 7px 14px; color: #cbd5e1; border-bottom: 1px solid #111827; }
+    .items-table tr:last-child td { border-bottom: none; }
+
+    .mode-local    { color: #34d399; font-size: 0.7rem; }
+    .mode-mail     { color: #60a5fa; font-size: 0.7rem; }
+
+    .view-toggle {
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      background: #1e2535;
+      border: 1px solid #2d3748;
+      border-radius: 4px;
+      color: #94a3b8;
+      cursor: pointer;
+      margin-left: auto;
+    }
+    .view-toggle:hover { color: #e2e8f0; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Multi-Supplier Order Router</h1>
+  <span>POST /api/route</span>
+</header>
+
+<div class="main">
+
+  <!-- LEFT: Input -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-label">Order JSON</span>
+      <div class="sample-btns">
+        <button class="sample-btn" onclick="loadSample('simple')">Simple</button>
+        <button class="sample-btn" onclick="loadSample('mailorder')">Mail Order</button>
+        <button class="sample-btn" onclick="loadSample('infeasible')">Remote Zip</button>
+      </div>
+    </div>
+    <textarea id="input" spellcheck="false" placeholder='Paste or type order JSON here...'></textarea>
+    <div class="actions">
+      <button class="submit-btn" id="submitBtn" onclick="submitOrder()">
+        <span>Submit</span>
+      </button>
+      <button class="clear-btn" onclick="clearAll()">Clear</button>
+      <span class="err-msg" id="errMsg"></span>
+    </div>
+  </div>
+
+  <!-- RIGHT: Response -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-label">Response</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="spinner" id="spinner"></div>
+        <button class="view-toggle" id="viewToggle" onclick="toggleView()" style="display:none">Raw JSON</button>
+      </div>
+    </div>
+    <div class="response-area" id="responseArea">
+      <span class="placeholder">Response will appear here...</span>
+    </div>
+    <div class="status-bar" id="statusBar"></div>
+  </div>
+
+</div>
+
+<script>
+  const SAMPLES = {
+    simple: {
+      order_id: "ORD-001",
+      customer_zip: "10015",
+      mail_order: false,
+      items: [
+        { product_code: "WC-STD-001", quantity: 1 },
+        { product_code: "OX-PORT-024", quantity: 1 }
+      ],
+      priority: "standard",
+      notes: "Simple order - wheelchair + oxygen"
+    },
+    mailorder: {
+      order_id: "ORD-003",
+      customer_zip: "02130",
+      mail_order: true,
+      items: [
+        { product_code: "CP-STD-031", quantity: 1 },
+        { product_code: "CP-MSK-FF-035", quantity: 2 },
+        { product_code: "NB-COMP-039", quantity: 1 }
+      ],
+      priority: "standard",
+      notes: "CPAP order with mail order enabled"
+    },
+    infeasible: {
+      order_id: "ORD-999",
+      customer_zip: "99999",
+      mail_order: false,
+      items: [
+        { product_code: "WC-STD-001", quantity: 1 }
+      ],
+      notes: "Remote ZIP with no local suppliers"
+    }
+  };
+
+  let currentData = null;
+  let showingRaw = false;
+
+  function loadSample(key) {
+    document.getElementById('input').value = JSON.stringify(SAMPLES[key], null, 2);
+    document.getElementById('input').classList.remove('error');
+    document.getElementById('errMsg').textContent = '';
+  }
+
+  function clearAll() {
+    document.getElementById('input').value = '';
+    document.getElementById('input').classList.remove('error');
+    document.getElementById('errMsg').textContent = '';
+    document.getElementById('responseArea').innerHTML = '<span class="placeholder">Response will appear here...</span>';
+    document.getElementById('statusBar').innerHTML = '';
+    document.getElementById('viewToggle').style.display = 'none';
+    currentData = null;
+    showingRaw = false;
+  }
+
+  function toggleView() {
+    if (!currentData) return;
+    showingRaw = !showingRaw;
+    document.getElementById('viewToggle').textContent = showingRaw ? 'Formatted' : 'Raw JSON';
+    if (showingRaw) {
+      document.getElementById('responseArea').textContent = JSON.stringify(currentData, null, 2);
+    } else {
+      renderFormatted(currentData);
+    }
+  }
+
+  async function submitOrder() {
+    const input = document.getElementById('input');
+    const errMsg = document.getElementById('errMsg');
+    const btn = document.getElementById('submitBtn');
+    const spinner = document.getElementById('spinner');
+
+    // Validate JSON
+    let body;
+    try {
+      body = JSON.parse(input.value.trim());
+      input.classList.remove('error');
+      errMsg.textContent = '';
+    } catch (e) {
+      input.classList.add('error');
+      errMsg.textContent = 'Invalid JSON: ' + e.message;
+      return;
+    }
+
+    // Loading state
+    btn.disabled = true;
+    spinner.style.display = 'block';
+    document.getElementById('responseArea').innerHTML = '<span class="placeholder">Routing...</span>';
+    document.getElementById('statusBar').innerHTML = '';
+    document.getElementById('viewToggle').style.display = 'none';
+    currentData = null;
+    showingRaw = false;
+
+    const t0 = Date.now();
+    try {
+      const res = await fetch('/api/route', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      const elapsed = Date.now() - t0;
+      const data = await res.json();
+      currentData = data;
+
+      renderStatusBar(res.status, elapsed, data);
+      renderFormatted(data);
+      document.getElementById('viewToggle').style.display = 'block';
+    } catch (e) {
+      document.getElementById('responseArea').innerHTML = `<span style="color:#f87171">Network error: ${e.message}</span>`;
+    } finally {
+      btn.disabled = false;
+      spinner.style.display = 'none';
+    }
+  }
+
+  function renderStatusBar(status, elapsed, data) {
+    const bar = document.getElementById('statusBar');
+    const statusClass = status === 200 ? 'badge-200' : status >= 400 && status < 500 ? 'badge-400' : 'badge-500';
+    let feasibilityBadge = '';
+    if (status === 200 && data && typeof data.feasible === 'boolean') {
+      feasibilityBadge = data.feasible
+        ? '<span class="badge badge-feasible">Feasible</span>'
+        : '<span class="badge badge-infeasible">Infeasible</span>';
+    }
+    bar.innerHTML = `<span class="badge ${statusClass}">HTTP ${status}</span>${feasibilityBadge}<span style="margin-left:auto">${elapsed}ms</span>`;
+  }
+
+  function renderFormatted(data) {
+    const area = document.getElementById('responseArea');
+
+    if (!data || data.feasible === undefined) {
+      // Not a routing response (e.g. validation error) — show highlighted JSON
+      area.innerHTML = highlightJson(JSON.stringify(data, null, 2));
+      return;
+    }
+
+    if (!data.feasible) {
+      area.innerHTML = `
+        <div style="display:flex;align-items:flex-start;gap:12px;padding:14px;background:#1a0a0a;border:1px solid #450a0a;border-radius:8px">
+          <span style="font-size:1.4rem">⚠</span>
+          <div>
+            <div style="font-weight:600;color:#f87171;margin-bottom:4px">Order cannot be fulfilled</div>
+            <div style="font-size:0.8rem;color:#fca5a5">${esc(data.infeasibility_reason || 'No eligible suppliers found.')}</div>
+          </div>
+        </div>
+        <details style="margin-top:14px">
+          <summary style="cursor:pointer;font-size:0.75rem;color:#475569;user-select:none">Raw JSON</summary>
+          <pre style="margin-top:8px;font-size:0.78rem">${highlightJson(JSON.stringify(data, null, 2))}</pre>
+        </details>`;
+      return;
+    }
+
+    const suppliers = data.routing || [];
+    const totalItems = suppliers.reduce((n, s) => n + s.items.length, 0);
+    const shipments = suppliers.length;
+
+    let html = `
+      <div style="display:flex;gap:16px;margin-bottom:16px;font-size:0.78rem;color:#64748b">
+        <span><b style="color:#f1f5f9">${shipments}</b> supplier${shipments !== 1 ? 's' : ''}</span>
+        <span><b style="color:#f1f5f9">${totalItems}</b> item${totalItems !== 1 ? 's' : ''}</span>
+      </div>
+      <div class="routing-cards">`;
+
+    for (const s of suppliers) {
+      html += `
+        <div class="supplier-card">
+          <div class="supplier-card-header">
+            <div>
+              <div class="supplier-id">${esc(s.supplier_id)}</div>
+              <div class="supplier-name">${esc(s.supplier_name)}</div>
+            </div>
+          </div>
+          <table class="items-table">
+            <thead><tr>
+              <th>Product Code</th><th>Category</th><th>Qty</th><th>Mode</th>
+            </tr></thead>
+            <tbody>`;
+
+      for (const item of s.items) {
+        const modeClass = item.fulfillment_mode === 'local' ? 'mode-local' : 'mode-mail';
+        const modeLabel = item.fulfillment_mode === 'local' ? '● Local' : '✈ Mail Order';
+        html += `<tr>
+          <td style="font-family:monospace">${esc(item.product_code)}</td>
+          <td>${esc(item.category)}</td>
+          <td>${item.quantity}</td>
+          <td class="${modeClass}">${modeLabel}</td>
+        </tr>`;
+      }
+
+      html += `</tbody></table></div>`;
+    }
+
+    html += `</div>
+      <details style="margin-top:14px">
+        <summary style="cursor:pointer;font-size:0.75rem;color:#475569;user-select:none">Raw JSON</summary>
+        <pre style="margin-top:8px;font-size:0.78rem">${highlightJson(JSON.stringify(data, null, 2))}</pre>
+      </details>`;
+
+    area.innerHTML = html;
+  }
+
+  function highlightJson(str) {
+    return str
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, m => {
+        if (/^"/.test(m)) {
+          if (/:$/.test(m)) return `<span class="json-key">${m}</span>`;
+          return `<span class="json-str">${m}</span>`;
+        }
+        if (/true|false/.test(m)) return `<span class="json-bool">${m}</span>`;
+        if (/null/.test(m)) return `<span class="json-null">${m}</span>`;
+        return `<span class="json-num">${m}</span>`;
+      });
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // Submit on Ctrl+Enter
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') submitOrder();
+  });
+
+  // Load simple sample on page load
+  loadSample('simple');
+</script>
+
+</body>
+</html>
