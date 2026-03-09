@@ -218,6 +218,16 @@ multi-supplier-order-router/
 
 ---
 
+## Known Limitations
+
+### Supplier cache invalidation
+
+The supplier routing cache (`SupplierCache`) is populated lazily from the database on first request per ZIP and held in memory for the lifetime of the process. This is intentional for performance — suppliers are treated as immutable once seeded.
+
+**Future work:** If a mechanism for adding or updating suppliers without restarting the service is introduced (e.g. an admin re-seed endpoint or live supplier updates), a cache invalidation or reload strategy will be required. The `ISupplierCache` interface boundary exists specifically to support this — a `Reload()` method or TTL-based eviction can be added to the implementation without changing any routing logic.
+
+---
+
 ## Running Tests
 
 Requires the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) installed on the host (not needed to run the app via Docker).

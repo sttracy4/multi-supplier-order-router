@@ -31,10 +31,11 @@ public class OrdersControllerTests : IClassFixture<OrdersControllerTests.TestWeb
 
             builder.ConfigureServices(services =>
             {
-                // Replace real DbContext with in-memory
+                // Replace real DbContextFactory with in-memory
+                services.RemoveAll<IDbContextFactory<AppDbContext>>();
                 services.RemoveAll<DbContextOptions<AppDbContext>>();
                 services.RemoveAll<AppDbContext>();
-                services.AddDbContext<AppDbContext>(opts =>
+                services.AddDbContextFactory<AppDbContext>(opts =>
                     opts.UseInMemoryDatabase(dbName));
 
                 // Seed test data after container is built
@@ -281,9 +282,9 @@ public class OrdersControllerTests : IClassFixture<OrdersControllerTests.TestWeb
         Assert.NotEmpty(result.Errors!);
     }
 
-    // Product code case sensitivity: wrong case → infeasible
+    // Product code case sensitivity: wrong case → still routed, response uses canonical casing
     [Fact]
-    public async Task Route_ProductCodeWrongCase_Returns200WithInfeasible()
+    public async Task Route_ProductCodeWrongCase_Returns200WithFeasible()
     {
         var request = new OrderRequest
         {
@@ -296,8 +297,8 @@ public class OrdersControllerTests : IClassFixture<OrdersControllerTests.TestWeb
         var response = await PostOrderAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var result = await response.Content.ReadFromJsonAsync<OrderResponse>(JsonOptions());
-        Assert.False(result!.Feasible);
-        Assert.Contains(result.Errors!, e => e.Contains("wc-std-001"));
+        Assert.True(result!.Feasible);
+        Assert.Equal("WC-STD-001", result.Routing[0].Items[0].ProductCode); // canonical casing
     }
 
     // Product code with trailing whitespace → trimmed and routed successfully

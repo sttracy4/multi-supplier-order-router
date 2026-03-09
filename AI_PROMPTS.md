@@ -111,3 +111,12 @@ Let's refactor the unsuccessful routeing response to look more like this
    "Order must include a valid customer_zip"
    ]
 }
+
+## Prompt 9
+Implement a lazy loading caching mechanism for supplier zip, invalidate for now on app restart but note as something to decide later
+
+## Prompt 10
+It looks like if I enter two of the same items on separate objects in the items array in an orders json, it will order them separately instead of combining them with a quantity of 2. This is an edge case, what would it look like to fix
+
+## Prompt 11
+What are some other edge cases like we just fixed that could also exist in the business logic or app logic? 

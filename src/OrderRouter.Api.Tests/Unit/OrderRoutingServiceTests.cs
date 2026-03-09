@@ -230,9 +230,9 @@ public class OrderRoutingServiceTests
         Assert.Contains(result.Errors!, e => e.Contains("DOES-NOT-EXIST"));
     }
 
-    // Scenario 9: Duplicate product codes in same order → both line items preserved
+    // Scenario 9: Duplicate product codes in same order → merged into one line item with summed quantity
     [Fact]
-    public async Task Route_DuplicateProductCodesInItems_ReturnsBothLineItems()
+    public async Task Route_DuplicateProductCodesInItems_MergesIntoSingleLineItem()
     {
         var db = BuildDb(new Product { Id = 1, ProductCode = "A001", ProductName = "Widget A", Category = "widgets" });
 
@@ -265,12 +265,13 @@ public class OrderRoutingServiceTests
 
         Assert.True(result.Feasible);
         Assert.Single(result.Routing);
-        Assert.Equal(2, result.Routing[0].Items.Count); // both line items preserved under one supplier
+        Assert.Single(result.Routing[0].Items);          // merged into one line item
+        Assert.Equal(3, result.Routing[0].Items[0].Quantity); // 2 + 1
     }
 
-    // Scenario 10: Two unknown product codes → only first is reported
+    // Scenario 10: Multiple unknown product codes → all reported
     [Fact]
-    public async Task Route_MultipleUnknownProductCodes_ReportsFirstUnknownOnly()
+    public async Task Route_MultipleUnknownProductCodes_ReportsAllUnknown()
     {
         var db = BuildDb(); // no products seeded
 
@@ -292,7 +293,58 @@ public class OrderRoutingServiceTests
 
         Assert.False(result.Feasible);
         Assert.Contains(result.Errors!, e => e.Contains("UNKNOWN-1"));
-        Assert.DoesNotContain(result.Errors!, e => e.Contains("UNKNOWN-2"));
+        Assert.Contains(result.Errors!, e => e.Contains("UNKNOWN-2"));
+    }
+
+    // Scenario 13: Product code lookup is case-insensitive; response uses canonical DB casing
+    [Fact]
+    public async Task Route_LowercaseProductCode_MatchesCanonicalCode()
+    {
+        var db = BuildDb(new Product { Id = 1, ProductCode = "A001", ProductName = "Widget A", Category = "widgets" });
+
+        var supplier = new Supplier
+        {
+            Id = 1, SupplierId = "SUP-001", SupplierName = "Acme", SatisfactionScore = 9,
+            CanMailOrder = false, ServesNationwide = false,
+            ServiceZips = new List<SupplierServiceZip> { new() { Zip = "10001" } },
+            ProductCategories = new List<SupplierProductCategory> { new() { Category = "widgets" } },
+        };
+
+        var repo = new Mock<ISupplierRepository>();
+        repo.Setup(r => r.GetEligibleSuppliersForAllCategoriesAsync("10001", false, It.IsAny<IEnumerable<string>>()))
+            .ReturnsAsync(new List<Supplier> { supplier });
+
+        var service = new OrderRoutingService(db, repo.Object);
+        var result = await service.RouteAsync(SimpleRequest("10001", false, "a001")); // lowercase input
+
+        Assert.True(result.Feasible);
+        Assert.Equal("A001", result.Routing[0].Items[0].ProductCode); // canonical casing in response
+    }
+
+    // Scenario 14: Multiple categories with no eligible supplier → all reported
+    [Fact]
+    public async Task Route_MultipleMissingCategories_ReportsAll()
+    {
+        var db = BuildDb(
+            new Product { Id = 1, ProductCode = "A001", ProductName = "Widget A", Category = "widgets" },
+            new Product { Id = 2, ProductCode = "B001", ProductName = "Gadget B", Category = "gadgets" });
+
+        var repo = new Mock<ISupplierRepository>();
+        repo.Setup(r => r.GetEligibleSuppliersForAllCategoriesAsync(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>>()))
+            .ReturnsAsync(new List<Supplier>());
+        repo.Setup(r => r.GetEligibleSuppliersByCategoryAsync(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<IEnumerable<string>>()))
+            .ReturnsAsync(new Dictionary<string, List<Supplier>>
+            {
+                ["widgets"] = new List<Supplier>(),
+                ["gadgets"] = new List<Supplier>(),
+            });
+
+        var service = new OrderRoutingService(db, repo.Object);
+        var result = await service.RouteAsync(SimpleRequest("10001", false, "A001", "B001"));
+
+        Assert.False(result.Feasible);
+        Assert.Contains(result.Errors!, e => e.Contains("widgets"));
+        Assert.Contains(result.Errors!, e => e.Contains("gadgets"));
     }
 
     // Scenario 11: Nationwide supplier always returns fulfillment_mode "local"

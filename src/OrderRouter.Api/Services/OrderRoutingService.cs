@@ -17,24 +17,33 @@ public class OrderRoutingService : IOrderRoutingService
         _supplierRepo = supplierRepo;
     }
 
-    private record ItemWithCategory(OrderItem Item, string Category);
+    private record ItemWithCategory(string ProductCode, int Quantity, string Category);
 
     public async Task<OrderResponse> RouteAsync(OrderRequest request)
     {
-        // Step 1: Resolve product categories
+        // Step 1: Resolve product categories (case-insensitive lookup, collect all unknowns)
+        var mergedItems = request.Items
+            .GroupBy(i => i.ProductCode.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(g => new OrderItem { ProductCode = g.Key, Quantity = g.Sum(i => i.Quantity) })
+            .ToList();
+
         var itemCategories = new List<ItemWithCategory>();
-        foreach (var item in request.Items)
+        var unknownCodes = new List<string>();
+        foreach (var item in mergedItems)
         {
-            var trimmedCode = item.ProductCode.Trim();
+            var lowerCode = item.ProductCode.ToLowerInvariant();
             var product = await _db.Products
                 .AsNoTracking()
-                .FirstOrDefaultAsync(p => p.ProductCode == trimmedCode);
+                .FirstOrDefaultAsync(p => p.ProductCode.ToLower() == lowerCode);
 
             if (product == null)
-                return Infeasible($"Unknown product code: {trimmedCode}");
-
-            itemCategories.Add(new ItemWithCategory(item, product.Category));
+                unknownCodes.Add(item.ProductCode);
+            else
+                itemCategories.Add(new ItemWithCategory(product.ProductCode, item.Quantity, product.Category));
         }
+
+        if (unknownCodes.Count > 0)
+            return Infeasible(unknownCodes.Select(c => $"Unknown product code: {c}"));
 
         var requiredCategories = itemCategories.Select(x => x.Category).Distinct().ToList();
         var normalizedZip = ZipRangeParser.NormalizeZip(request.CustomerZip);
@@ -56,11 +65,12 @@ public class OrderRoutingService : IOrderRoutingService
         var byCategory = await _supplierRepo
             .GetEligibleSuppliersByCategoryAsync(request.CustomerZip, request.MailOrder, requiredCategories);
 
-        foreach (var cat in requiredCategories)
-        {
-            if (!byCategory.TryGetValue(cat, out var candidates) || candidates.Count == 0)
-                return Infeasible($"No eligible supplier found for category: {cat}");
-        }
+        var missingCategories = requiredCategories
+            .Where(cat => !byCategory.TryGetValue(cat, out var c) || c.Count == 0)
+            .ToList();
+
+        if (missingCategories.Count > 0)
+            return Infeasible(missingCategories.Select(cat => $"No eligible supplier found for category: {cat}"));
 
         // Assign best supplier per category
         var assignedByCategory = requiredCategories.ToDictionary(
@@ -106,8 +116,8 @@ public class OrderRoutingService : IOrderRoutingService
             SupplierName = kvp.Key.SupplierName,
             Items = kvp.Value.Select(x => new RoutedItem
             {
-                ProductCode = x.Item.ProductCode,
-                Quantity = x.Item.Quantity,
+                ProductCode = x.ProductCode,
+                Quantity = x.Quantity,
                 Category = x.Category,
                 FulfillmentMode = DetermineFulfillmentMode(kvp.Key, normalizedZip),
             }).ToList(),
@@ -118,4 +128,7 @@ public class OrderRoutingService : IOrderRoutingService
 
     private static OrderResponse Infeasible(string error) =>
         new() { Feasible = false, Errors = new List<string> { error } };
+
+    private static OrderResponse Infeasible(IEnumerable<string> errors) =>
+        new() { Feasible = false, Errors = errors.ToList() };
 }

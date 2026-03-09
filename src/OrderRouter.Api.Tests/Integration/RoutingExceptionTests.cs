@@ -39,9 +39,10 @@ public class RoutingExceptionTests : IClassFixture<RoutingExceptionTests.Throwin
             builder.ConfigureServices(services =>
             {
                 // Use in-memory DB so startup migration is skipped
+                services.RemoveAll<IDbContextFactory<AppDbContext>>();
                 services.RemoveAll<DbContextOptions<AppDbContext>>();
                 services.RemoveAll<AppDbContext>();
-                services.AddDbContext<AppDbContext>(opts => opts.UseInMemoryDatabase(dbName));
+                services.AddDbContextFactory<AppDbContext>(opts => opts.UseInMemoryDatabase(dbName));
 
                 // Replace routing service with one that always throws
                 services.RemoveAll<IOrderRoutingService>();

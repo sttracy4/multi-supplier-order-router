@@ -27,12 +27,12 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<SupplierServiceZip>(e =>
         {
-            e.HasIndex(z => z.Zip);
+            e.HasIndex(z => new { z.Zip, z.SupplierId });
         });
 
         modelBuilder.Entity<SupplierProductCategory>(e =>
         {
-            e.HasIndex(c => c.Category);
+            e.HasIndex(c => new { c.Category, c.SupplierId });
         });
 
         modelBuilder.Entity<Product>(e =>
